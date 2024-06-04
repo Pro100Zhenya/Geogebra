@@ -196,10 +196,11 @@ def update_LINE(line: LINE):
     elif line.dependencies["type_dependencies"] == "parallel_line":
         if line.existence != "death" and line.existence:
             line_components = parallel_line(line.dependencies["depend_object"][0],
-                                                 line.dependencies["depend_object"][1])
+                                            line.dependencies["depend_object"][1])
             line.X = line_components[0]
             line.Y = line_components[1]
             line.formula_update()
+
 
 def right_point(point: POINT, object_1, object_2):
     possible_point = intersections_object_object(object_1, object_2)
@@ -296,8 +297,16 @@ def update_POINT(point: POINT, new_coordinate=False):
             point.coordinate = new_coordinate
     elif point.dependencies["type_dependencies"] == "belong":
         if new_coordinate and not point.fixity:
+            if type(point.dependencies["depend_object"][0]) == LINE:
+                point.existence = point_belongs_line(
+                    nearest_point_object(new_coordinate, point.dependencies["depend_object"][0])[0],
+                    point.dependencies["depend_object"][0])
             point.coordinate = nearest_point_object(new_coordinate, point.dependencies["depend_object"][0])[0]
         else:
+            if type(point.dependencies["depend_object"][0]) == LINE:
+                point.existence = point_belongs_line(
+                    nearest_point_object(point.coordinate, point.dependencies["depend_object"][0])[0],
+                    point.dependencies["depend_object"][0])
             point.coordinate = nearest_point_object(point.coordinate, point.dependencies["depend_object"][0])[0]
 
 
