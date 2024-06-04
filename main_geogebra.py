@@ -1,12 +1,11 @@
-import pygame
 from pygame.locals import *
 from pygame import gfxdraw
-from classes import *
 from functions import *
+from test_button import *
 
 pygame.init()
 
-width, height = (600, 600)  # ширина,высота экрана
+width, height = (1000, 700)  # ширина,высота экрана
 window = pygame.display.set_mode((width, height))
 window.fill((255, 255, 255))
 
@@ -17,18 +16,19 @@ def check_short(x):
     return False
 
 
-def draw_circle(surface, coord, radius, filling: bool, color):
+def draw_circle(surface, coord, radius, filling: bool, color, thickness=1):
     """рисует круг"""
 
     x, y = coord
-    if check_short(x) and check_short(y) and check_short(radius):
-        gfxdraw.aacircle(surface, x, y, radius, color)
-        if filling:
-            gfxdraw.filled_circle(surface, x, y, radius, color)
+    for i in range(thickness):
+        if check_short(x) and check_short(y) and check_short(radius):
+            gfxdraw.aacircle(surface, x, y, radius + (-1) ** i * (i // 2), color)
+    if filling:
+        gfxdraw.filled_circle(surface, x, y, radius, color)
 
 
-def aaline_mod(surface, line: LINE, color, thickness=1, type_line="straight"):
-    if type_line == "straight":
+def aaline_mod(surface, line: LINE, color, thickness=1):
+    if line.type_line == "straight":
         if line.formula[0].real == 0 or abs(line.formula[0].imag / line.formula[0].real) > 1:
             line_left = LINE(
                 complex_plane.left_top_coordinate - (3 + thickness) * complex_plane.dimension,
@@ -60,6 +60,11 @@ def aaline_mod(surface, line: LINE, color, thickness=1, type_line="straight"):
                 pygame.draw.aaline(surface, color, list(
                     map(round, flatness_display(start_pos + (-1) ** i * complex_plane.dimension * i // 2))), list(
                     map(round, flatness_display(end_pos + (-1) ** i * complex_plane.dimension * i // 2))))
+    if line.type_line == "segment":
+        for i in range(thickness):
+            pygame.draw.aaline(surface, color, list(
+                map(round, flatness_display(line.X + (-1) ** i * complex_plane.dimension * i // 2))), list(
+                map(round, flatness_display(line.Y + (-1) ** i * complex_plane.dimension * i // 2))))
 
 
 def display_flatness(coordinates: list):
@@ -93,6 +98,12 @@ def changing_mod(event):
         mod_program = "DELETION"
     elif event == pygame.K_4:
         mod_program = "VISIBLE/INVISIBLE"
+    elif event == pygame.K_8:
+        mod_program = "MIDDLE_POINT"
+    elif event == pygame.K_9:
+        mod_program = "PERPENDICULAR_LINE"
+    elif event == pygame.K_q:
+        mod_program = "MIDDLE_LINE"
 
 
 def position_point(coordinates: complex, consider_point=True, consider_intersections=True, consider_object=True):
@@ -101,7 +112,7 @@ def position_point(coordinates: complex, consider_point=True, consider_intersect
     inaccuracy_POINT = 16  # в пикселях
     if consider_point and not point:
         for object in objects:
-            if object.visibility != "invisible" or mod_program == "VISIBLE/INVISIBLE":
+            if object.visibility != "invisible" or mod_program == "VISIBLE_INVISIBLE":
                 if type(object) == POINT:
                     if not point:
                         if abs(object.coordinate - coordinates) <= (inaccuracy_POINT * complex_plane.dimension):
@@ -112,8 +123,8 @@ def position_point(coordinates: complex, consider_point=True, consider_intersect
     if not point and consider_intersections:
         for i in range(len(objects)):
             for j in range(i + 1, len(objects)):
-                if (objects[i].visibility != "invisible" and objects[
-                    j].visibility != "invisible") or mod_program == "VISIBLE/INVISIBLE":
+                if (objects[i].visibility != "invisible" and objects[j].visibility != "invisible") \
+                        or mod_program == "VISIBLE_INVISIBLE":
                     if type(objects[i]) != POINT and type(objects[j]) != POINT:
                         z = intersections_object_object(objects[i], objects[j])
                         for Z in z:
@@ -130,7 +141,7 @@ def position_point(coordinates: complex, consider_point=True, consider_intersect
 
     if not point and consider_object:
         for i in range(len(objects)):
-            if objects[i].visibility != "invisible" or mod_program == "VISIBLE/INVISIBLE":
+            if objects[i].visibility != "invisible" or mod_program == "VISIBLE_INVISIBLE":
                 if type(objects[i]) != POINT:
                     z = nearest_point_object(coordinates, objects[i])
                     if not point:
@@ -185,18 +196,40 @@ def mod_line(event_mousebuttondown):
             withdrawal_special()
 
 
+def mod_segment(event_mousebuttondown):
+    if not temporary_objects:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        point.visibility = "special"
+        temporary_objects.append(point)
+    else:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        coordinates = position_point(coordinates)
+        if coordinates.coordinate != temporary_objects[0].coordinate:
+            temporary_objects.append(coordinates)
+        if len(temporary_objects) == 2:
+            for object in temporary_objects:
+                if object not in objects:
+                    objects.append(object)
+            objects.append(
+                LINE(temporary_objects[0].coordinate, temporary_objects[1].coordinate,
+                     {"type_dependencies": "two_points", "depend_object": [temporary_objects[0], temporary_objects[1]],
+                      "additional_restrictions": []}, type_line="segment"))
+            withdrawal_special()
+
+
 def mod_zoom(event_mousebuttondown):
     """мод изменения ..."""  # забыл слово
     if event_mousebuttondown.type == MOUSEBUTTONDOWN:
         if event.button == 1:  # левая кнопка мыши
-            if complex_plane.dimension > 1 / 10 ** 4:
+            if complex_plane.dimension > 10:
                 complex_plane.update(
                     left_top_coordinate=complex_plane.left_top_coordinate + (
                             1 - 1 / complex_plane.zoom_constant) * complex(
                         event_mousebuttondown.pos[0], event_mousebuttondown.pos[1]) * complex_plane.dimension,
                     dimension=complex_plane.dimension / complex_plane.zoom_constant)
         if event.button == 3:  # правая кнопка мыши
-            if complex_plane.dimension < 10 ** 4:
+            if complex_plane.dimension < 10 ** 5:
                 complex_plane.update(
                     left_top_coordinate=complex_plane.left_top_coordinate - (complex_plane.zoom_constant - 1) * complex(
                         event_mousebuttondown.pos[0], event_mousebuttondown.pos[1]) * complex_plane.dimension,
@@ -305,6 +338,147 @@ def mod_visible_invisible(event_mousebuttondown):
     withdrawal_special()
 
 
+def mod_middle_point(event_mousebuttondown):
+    if not temporary_objects:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        point.visibility = "special"
+        temporary_objects.append(point)
+    else:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        if point.coordinate != temporary_objects[0].coordinate:
+            temporary_objects.append(point)
+        if len(temporary_objects) == 2:
+            for object in temporary_objects:
+                if object not in objects:
+                    objects.append(object)
+            point_components = middle_point(temporary_objects[0], temporary_objects[1])
+            objects.append(
+                POINT(point_components[0], point_components[1], fixity=True))
+            withdrawal_special()
+
+
+def mod_perpendicular_line(event_mousebuttondown):
+    if not temporary_objects:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        point.visibility = "special"
+        temporary_objects.append(point)
+    else:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates, consider_point=False, consider_intersections=False)
+        if point.dependencies["depend_object"] and type(point.dependencies["depend_object"][0]) == LINE:
+            temporary_objects.append(point.dependencies["depend_object"][0])
+        if len(temporary_objects) == 2:
+            for object in temporary_objects:
+                if object not in objects:
+                    objects.append(object)
+            line_components = perpendicular_line(temporary_objects[0], temporary_objects[1])
+            objects.append(LINE(line_components[0], line_components[1], line_components[2]))
+            withdrawal_special()
+
+
+def mod_middle_line(event_mousebuttondown):
+    if not temporary_objects:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        point.visibility = "special"
+        temporary_objects.append(point)
+    else:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        if point.coordinate != temporary_objects[0].coordinate:
+            temporary_objects.append(point)
+        if len(temporary_objects) == 2:
+            for object in temporary_objects:
+                if object not in objects:
+                    objects.append(object)
+            line_components = middle_line(temporary_objects[0], temporary_objects[1])
+            objects.append(LINE(line_components[0], line_components[1], line_components[2]))
+            withdrawal_special()
+
+
+def mod_circle_tree_points(event_mousebuttondown):
+    if len(temporary_objects) < 3:
+        flag_add = True
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        for object in temporary_objects:
+            if object.coordinate == point.coordinate:
+                flag_add = False
+                break
+        if flag_add:
+            point.visibility = "special"
+            temporary_objects.append(point)
+    if len(temporary_objects) == 3:
+        for object in temporary_objects:
+            if object not in objects:
+                objects.append(object)
+        circle_components = circle_tree_points(temporary_objects[0], temporary_objects[1], temporary_objects[2])
+        objects.append(CIRCLE(circle_components[0], circle_components[1], circle_components[2]))
+        withdrawal_special()
+
+
+def mod_bisector(event_mousebuttondown):
+    if len(temporary_objects) < 3:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        if len(temporary_objects) == 0 or temporary_objects[-1].coordinate != point.coordinate:
+            point.visibility = "special"
+            temporary_objects.append(point)
+    if len(temporary_objects) == 3:
+        for object in temporary_objects:
+            if object not in objects:
+                objects.append(object)
+        line_components = bisector(temporary_objects[0], temporary_objects[1], temporary_objects[2])
+        objects.append(LINE(line_components[0], line_components[1], line_components[2]))
+        withdrawal_special()
+
+
+def mod_tangents(event_mousebuttondown):
+    if not temporary_objects:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        point.visibility = "special"
+        temporary_objects.append(point)
+    else:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates, consider_point=False, consider_intersections=False)
+        if point.dependencies["depend_object"] and type(point.dependencies["depend_object"][0]) == CIRCLE:
+            temporary_objects.append(point.dependencies["depend_object"][0])
+        if len(temporary_objects) == 2:
+            for object in temporary_objects:
+                if object not in objects:
+                    objects.append(object)
+            lines_components = tangents(temporary_objects[0], temporary_objects[1])
+            objects.append(LINE(lines_components[0][0], lines_components[0][1], lines_components[0][2],
+                                existence=lines_components[0][3]))
+            objects.append(LINE(lines_components[1][0], lines_components[1][1], lines_components[1][2],
+                                existence=lines_components[1][3]))
+            withdrawal_special()
+
+
+def mod_parallel_line(event_mousebuttondown):
+    if not temporary_objects:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates)
+        point.visibility = "special"
+        temporary_objects.append(point)
+    else:
+        coordinates = display_flatness(event_mousebuttondown.pos)
+        point = position_point(coordinates, consider_point=False, consider_intersections=False)
+        if point.dependencies["depend_object"] and type(point.dependencies["depend_object"][0]) == LINE:
+            temporary_objects.append(point.dependencies["depend_object"][0])
+        if len(temporary_objects) == 2:
+            for object in temporary_objects:
+                if object not in objects:
+                    objects.append(object)
+            line_components = parallel_line(temporary_objects[0], temporary_objects[1])
+            objects.append(LINE(line_components[0], line_components[1], line_components[2]))
+            withdrawal_special()
+
+
 def distribution_mod_event(event_mousebuttondown):
     """распределение по запуску функции опредленного мода"""
     if mod_program == "POINT":
@@ -323,14 +497,43 @@ def distribution_mod_event(event_mousebuttondown):
     elif mod_program == "DELETION":
         if event_mousebuttondown.type == MOUSEBUTTONDOWN:
             mod_deletion(event_mousebuttondown)
-    elif mod_program == "VISIBLE/INVISIBLE":
+    elif mod_program == "VISIBLE_INVISIBLE":
         if event_mousebuttondown.type == MOUSEBUTTONDOWN:
             mod_visible_invisible(event_mousebuttondown)
+    elif mod_program == "MIDDLE_POINT":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_middle_point(event_mousebuttondown)
+    elif mod_program == "PERPENDICULAR_LINE":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_perpendicular_line(event_mousebuttondown)
+    elif mod_program == "MIDDLE_LINE":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_middle_line(event_mousebuttondown)
+    elif mod_program == "CIRCLE_THREE_POINTS":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_circle_tree_points(event_mousebuttondown)
+    elif mod_program == "BISECTOR":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_bisector(event_mousebuttondown)
+    elif mod_program == "TANGENTS":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_tangents(event_mousebuttondown)
+    elif mod_program == "PARALLEL_LINE":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_parallel_line(event_mousebuttondown)
+    elif mod_program == "SEGMENT":
+        if event_mousebuttondown.type == MOUSEBUTTONDOWN:
+            mod_segment(event_mousebuttondown)
 
 
 def distribution_mod_not_event():
     if mod_program == "ZOOM":
         mod_zoom_moving()
+
+
+def brightness_change(color, n: float):
+    """измененение цвета"""
+    return (round(255 - (255 - color[0]) / n), round(255 - (255 - color[1]) / n), round(255 - (255 - color[2]) / n))
 
 
 def draw_POINT(object: POINT):
@@ -340,37 +543,37 @@ def draw_POINT(object: POINT):
             if not object.fixity:
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 4, True,
-                            (int(object.colors[0] / 3), int(object.colors[1] / 3), int(object.colors[2] / 3)))
+                            brightness_change(object.colors, 1))
             else:
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 3, True,
-                            (object.colors[0] // 3, object.colors[1] // 3, object.colors[2] // 3))
+                            brightness_change(object.colors, 1))
     elif object.visibility == "special":
         if object.existence:
             if not object.fixity:
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 4, True,
-                            (int(object.colors[0] / 3.5), int(object.colors[1] / 3.5), int(object.colors[2] / 3.5)))
+                            brightness_change(object.colors, 1))
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 7, False,
-                            (int(object.colors[0] / 3.5), int(object.colors[1] / 3.5), int(object.colors[2] / 3.5)))
+                            brightness_change(object.colors, 1))
             else:
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 3, True,
-                            (int(object.colors[0] / 3.5), int(object.colors[1] / 3.5), int(object.colors[2] / 3.5)))
+                            brightness_change(object.colors, 1))
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 6, False,
-                            (int(object.colors[0] / 3.5), int(object.colors[1] / 3.5), int(object.colors[2] / 3.5)))
-    elif object.visibility == "invisible" and mod_program == "VISIBLE/INVISIBLE":
+                            brightness_change(object.colors, 1))
+    elif object.visibility == "invisible" and mod_program == "VISIBLE_INVISIBLE":
         if object.existence:
             if not object.fixity:
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 4, True,
-                            (int(object.colors[0] / 1.7), int(object.colors[1] / 1.7), int(object.colors[2] / 1.7)))
+                            brightness_change(object.colors, 3))
             else:
                 draw_circle(window,
                             list(map(round, flatness_display(object.coordinate))), 3, True,
-                            (int(object.colors[0] / 1.7), int(object.colors[1] / 1.7), int(object.colors[2] / 1.7)))
+                            brightness_change(object.colors, 3))
 
 
 def draw_LINE(object: LINE):
@@ -378,12 +581,17 @@ def draw_LINE(object: LINE):
     if object.visibility == "visible":
         if object.existence:
             aaline_mod(window, object,
-                       (int(object.colors[0] / 3.5), int(object.colors[1] / 3.5), int(object.colors[2] / 3.5)),
+                       brightness_change(object.colors, 1),
                        thickness=1)
-    elif object.visibility == "invisible" and mod_program == "VISIBLE/INVISIBLE":
+    elif object.visibility == "special":
         if object.existence:
             aaline_mod(window, object,
-                       (int(object.colors[0] / 1.7), int(object.colors[1] / 1.7), int(object.colors[2] / 1.7)),
+                       brightness_change(object.colors, 1),
+                       thickness=3)
+    elif object.visibility == "invisible" and mod_program == "VISIBLE_INVISIBLE":
+        if object.existence:
+            aaline_mod(window, object,
+                       brightness_change(object.colors, 3),
                        thickness=1)
 
 
@@ -393,12 +601,64 @@ def draw_CIRCLE(object: CIRCLE):
         if object.existence:
             draw_circle(window, list(map(round, flatness_display(object.coordinate_centre))),
                         round(object.radius / complex_plane.dimension), False,
-                        (int(object.colors[0] / 3.5), int(object.colors[1] / 3.5), int(object.colors[2] / 3.5)))
-    elif object.visibility == "invisible" and mod_program == "VISIBLE/INVISIBLE":
+                        brightness_change(object.colors, 1), thickness=1)
+    elif object.visibility == "special":
         if object.existence:
             draw_circle(window, list(map(round, flatness_display(object.coordinate_centre))),
                         round(object.radius / complex_plane.dimension), False,
-                        (int(object.colors[0] / 1.7), int(object.colors[1] / 1.7), int(object.colors[2] / 1.7)))
+                        brightness_change(object.colors, 1), thickness=2)
+    elif object.visibility == "invisible" and mod_program == "VISIBLE_INVISIBLE":
+        if object.existence:
+            draw_circle(window, list(map(round, flatness_display(object.coordinate_centre))),
+                        round(object.radius / complex_plane.dimension), False,
+                        brightness_change(object.colors, 3), thickness=1)
+
+
+def creating_window():
+    """отвечает за дизайн приложения"""
+
+    construction_name_buttons = ["POINT", "LINE", "CIRCLE", "SEGMENT", "MIDDLE_POINT", "PERPENDICULAR_LINE",
+                                 "PARALLEL_LINE", "MIDDLE_LINE", "CIRCLE_THREE_POINTS", "BISECTOR", "TANGENTS"]
+    edit_name_buttons = ["MOVING_OBJECT", "ZOOM", "VISIBLE_INVISIBLE", "DELETION", "VISUAL"]
+    construction_button = LIST_BUTTON(window, (0, 0), [width, 50],
+                                      {"filling": (255, 255, 255), "border": (99, 99, 99), "border_radius": 4,
+                                       "button_alignment": "left"})
+    edit_button = LIST_BUTTON(window, (width - 50, 150), [width, 400],
+                              {"filling": (255, 255, 255), "border": (99, 99, 99), "border_radius": 4,
+                               "button_alignment": "top"})
+    all_graphics_components.append(construction_button)
+    all_graphics_components.append(edit_button)
+
+    def action(self: BUTTON):
+        global mod_program
+        withdrawal_special()
+        mod_program = self.styles[self.regim]["text"]
+        for button in list_working_buttons:
+            if button.regim == "Active":
+                if button.left_top[0] <= pygame.mouse.get_pos()[0] <= button.right_lower[0] and \
+                        button.left_top[1] <= pygame.mouse.get_pos()[1] <= button.right_lower[1]:
+                    button.regim = "Hover"
+                else:
+                    button.regim = "Normal"
+
+    for button in construction_name_buttons:
+        styles_button = {
+            "Normal": {"filling": (255, 255, 255), "border": (110, 110, 110), "border_radius": 4, "text": button,
+                       "show_text": False, "photo": f"image_button/{button}.png", "show_photo": True},
+            "Hover": {"filling": (255, 255, 255), "border": (142, 142, 255), "border_radius": 4, "text": button,
+                      "show_text": False, "photo": f"image_button/{button}.png", "show_photo": True},
+            "Active": {"filling": (255, 255, 255), "border": (80, 80, 255), "border_radius": 4, "text": button,
+                       "show_text": False, "photo": f"image_button/{button}.png", "show_photo": True}}
+        list_working_buttons.append(construction_button.add_button([styles_button, action, lambda x: False]))
+    for button in edit_name_buttons:
+        styles_button = {
+            "Normal": {"filling": (255, 255, 255), "border": (110, 110, 110), "border_radius": 4, "text": button,
+                       "show_text": False, "photo": f"image_button/{button}.png", "show_photo": True},
+            "Hover": {"filling": (255, 255, 255), "border": (142, 142, 255), "border_radius": 4, "text": button,
+                      "show_text": False, "photo": f"image_button/{button}.png", "show_photo": True},
+            "Active": {"filling": (255, 255, 255), "border": (80, 80, 255), "border_radius": 4, "text": button,
+                       "show_text": False, "photo": f"image_button/{button}.png", "show_photo": True}}
+        list_working_buttons.append(edit_button.add_button([styles_button, action, lambda x: False]))
 
 
 def rendering():
@@ -416,14 +676,20 @@ def rendering():
 if __name__ == '__main__':
     pygame.init()
     main_run = True
-
     mod_program = "POINT"
     complex_plane = flatness()
     objects = []  # все объекты в порядке сохдания
     temporary_objects = []  # временные объекты
 
+    list_working_buttons = []
+    all_graphics_components = []
+    working_buttons_surf = pygame.Surface((width, height))
+    creating_window()
+    for list_button in all_graphics_components:
+        list_button.draw()
+
     while main_run:
-        fps = 60
+        fps = 500
         clock = pygame.time.Clock()
         running = True
         while running:
@@ -432,22 +698,20 @@ if __name__ == '__main__':
                 if event.type == pygame.QUIT:
                     running = False
                     main_run = False
-                elif event.type == pygame.KEYDOWN:
-                    changing_mod(event.key)
-                else:  # event.type == MOUSEBUTTONDOWN:
-                    distribution_mod_event(event)
+                elif not any([list_button.update(event) for list_button in all_graphics_components]):
+                    if event.type == pygame.KEYDOWN:
+                        pass
+                    else:
+                        distribution_mod_event(event)
 
             window.fill((255, 255, 255))
 
             # добавить отрисовку
             rendering()
 
-            text = mod_program
-            text = pygame.font.Font(pygame.font.match_font("arial"), 14).render(text, 1, (100, 0, 0))
-            window.blit(text, text.get_rect(topright=(595, 5)))
+            for list_button in all_graphics_components:
+                list_button.draw()
 
             pygame.display.flip()
-            # if clock.get_fps()<300:
-            #     print(clock.get_fps())
-            clock.tick(fps)
+            clock.tick()
 pygame.quit()
